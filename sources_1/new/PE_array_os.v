@@ -1,11 +1,11 @@
 `timescale 1ns / 1ps
 //////////////////////////////////////////////////////////////////////////////////
 // Company: 
-// Engineer: 
+// Engineer: hzn
 // 
-// Create Date: 2025/11/24 18:50:55
+// Create Date: 2025/11/28 15:00:30
 // Design Name: 
-// Module Name: PE_array_dynamic
+// Module Name: PE_array_os
 // Project Name: 
 // Target Devices: 
 // Tool Versions: 
@@ -20,7 +20,7 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 
-module PE_array_dynamic #(
+module PE_array_os#(
     parameter ROW_len    = 3, 
     parameter COL_len    = 3,
     parameter DW   = 8,   // A/B 位宽
@@ -28,20 +28,14 @@ module PE_array_dynamic #(
 )(
     input clk,
     input rst_n,
+    input compute_en,
+    input read_en_in,
 
-     // 输入总线：左侧输入 A（ROW_len 行）
-    // a_bus = {a[ROW_len-1], ..., a[1], a[0]}
     input  signed [ROW_len*DW-1:0] a_bus,
-
-    // 输入总线：顶部输入 B（COL_len 列）
-    // b_bus = {b[COL_len-1], ..., b[1], b[0]}
     input  signed [COL_len*DW-1:0] b_bus,
-
-    // 输出 C（ROW_len × COL_len）
-    // 展开为一维 c_bus
-    output signed [ROW_len*COL_len*ACCW-1:0] c_bus
+    output reg signed [COL_len*ACCW-1:0] c_bus
 );
-
+//    localparam integer LATENCY = ROW_len + ROW_len + COL_len - 1;   
     // 内部 a/b 信号与 data_out
     wire signed [DW-1:0]   a_curr [0:ROW_len-1][0:COL_len-1];
     wire signed [DW-1:0]   b_curr [0:ROW_len-1][0:COL_len-1];
@@ -77,26 +71,44 @@ module PE_array_dynamic #(
                 // ================
                 // 实例化 PE_core
                 // ================
-                PE_core u_PE_core (
+                PE_core_os u_PE_core_os (
                     .clk     (clk),
                     .rst_n   (rst_n),
+                    .compute_en(compute_en),
                     .a_curr  (a_curr[i][j]),
                     .b_curr  (b_curr[i][j]),
                     .a_last  (a_last[i][j]),
                     .b_last  (b_last[i][j]),
                     .data_out(c_sig[i][j])
                 );
-
-                // ================
-                // 输出 c_sig → c_bus
-                // 按行展开成一维总线
-                // index = (i * COL_len + j) * ACCW
-                // ================
-                localparam integer C_IDX = (i*COL_len + j)*ACCW;
-                assign c_bus[C_IDX + ACCW - 1 : C_IDX] = c_sig[i][j];
-
             end
         end
     endgenerate
-
+    
+    reg [7:0] row_ptr;
+    integer k;
+    always @(posedge clk or negedge rst_n) begin
+        if(!rst_n) begin
+            row_ptr <= ROW_len-1;  // 从最后一行开始
+            c_bus <= 0;
+        end
+        else if(!read_en_in) begin
+            // 读使能拉低时恢复为最后一行
+            row_ptr <= ROW_len-1;
+            c_bus <= 0;
+        end
+        else begin
+            // 逐行输出该行的所有列数据
+            
+            for(k = 0; k < COL_len; k = k + 1) begin
+                c_bus[(k+1)*ACCW-1 -: ACCW] <= c_sig[row_ptr][k];
+            end
+    
+            // 下一拍：上一行
+            if(row_ptr > 0)
+                row_ptr <= row_ptr - 1;
+            else
+                row_ptr <= ROW_len-1;   // 输出完 0 行后回到最后一行
+        end
+    end
 endmodule
