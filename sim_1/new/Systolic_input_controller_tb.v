@@ -1,231 +1,167 @@
 `timescale 1ns / 1ps
 
-module tb_Systolic_input_controller;
+module tb_Systolic_Input_Controller;
 
-    // ²ÎÊı¶¨Òå
+    // =========================
+    // 1. å‚æ•°å®šä¹‰
+    // =========================
     parameter DATA_WIDTH = 8;
-    parameter ROWS = 4;
+    parameter ROWS = 4; // ä¸ºäº†æ–¹ä¾¿è§‚å¯Ÿæ³¢å½¢ï¼Œæˆ‘ä»¬ç”¨ 4x4 çš„è§„æ¨¡
     parameter COLS = 4;
-    parameter CLK_PERIOD = 10;
 
-    // ĞÅºÅ¶¨Òå
+    // =========================
+    // 2. ä¿¡å·å£°æ˜
+    // =========================
     reg clk;
     reg rst_n;
     reg enable;
-    reg signed [DATA_WIDTH*ROWS-1:0] A;
-    reg signed [DATA_WIDTH*COLS-1:0] B;
+    reg load;
+    reg data_flow;
+
+    // å±•å¹³çš„è¾“å…¥/è¾“å‡ºå‘é‡
+    reg  signed [DATA_WIDTH*ROWS-1:0] A_in;
+    reg  signed [DATA_WIDTH*COLS-1:0] B_in;
     wire signed [DATA_WIDTH*ROWS-1:0] A_out;
     wire signed [DATA_WIDTH*COLS-1:0] B_out;
     wire valid;
 
-    // ÊäÈëÊä³öÊı×é±äÁ¿£¨·½±ã²é¿´£©
-    reg [DATA_WIDTH-1:0] A_in_array [0:ROWS-1];
-    reg [DATA_WIDTH-1:0] B_in_array [0:COLS-1];
-    reg [DATA_WIDTH-1:0] A_out_array [0:ROWS-1];
-    reg [DATA_WIDTH-1:0] B_out_array [0:COLS-1];
+    // è¾…åŠ©å˜é‡ï¼šç”¨äºç”Ÿæˆæµ‹è¯•æ•°æ®
+    integer i, j;
 
-    // ÁÙÊ±Êı×é±äÁ¿
-    reg [DATA_WIDTH-1:0] temp_A [0:ROWS-1];
-    reg [DATA_WIDTH-1:0] temp_B [0:COLS-1];
-
-    // ÊµÀı»¯±»²âÄ£¿é
-    Systolic_input_controller #(
+    // =========================
+    // 3. å®ä¾‹åŒ– DUT (Device Under Test)
+    // =========================
+    Systolic_Input_Controller #(
         .DATA_WIDTH(DATA_WIDTH),
         .ROWS(ROWS),
         .COLS(COLS)
-    ) uut (
+    ) u_controller (
         .clk(clk),
         .rst_n(rst_n),
         .enable(enable),
-        .A(A),
-        .B(B),
+        .load(load),
+        .data_flow(data_flow),
+        .A(A_in),
+        .B(B_in),
         .A_out(A_out),
         .B_out(B_out),
         .valid(valid)
     );
 
-    // Ê±ÖÓÉú³É
-    always #(CLK_PERIOD/2) clk = ~clk;
+    // =========================
+    // 4. æ—¶é’Ÿç”Ÿæˆ (10ns å‘¨æœŸ)
+    // =========================
+    always #5 clk = ~clk;
 
-    // ÈÎÎñ£º½«Êä³öÏòÁ¿×ª»»ÎªÊı×é
-    task update_output_arrays;
-        integer i;
-        begin
-            for (i = 0; i < ROWS; i = i + 1) begin
-                A_out_array[i] = A_out[((i+1)*DATA_WIDTH)-1 -: DATA_WIDTH];
-            end
-            for (i = 0; i < COLS; i = i + 1) begin
-                B_out_array[i] = B_out[((i+1)*DATA_WIDTH)-1 -: DATA_WIDTH];
-            end
-        end
-    endtask
-
-    // ÈÎÎñ£ºÉèÖÃÊäÈëÊı¾İ
-    task set_input_data_A;
-        input [DATA_WIDTH-1:0] a0, a1, a2, a3;
-        integer i;
-        begin
-            temp_A[0] = a0;
-            temp_A[1] = a1;
-            temp_A[2] = a2;
-            temp_A[3] = a3;
-            
-            for (i = 0; i < ROWS; i = i + 1) begin
-                A_in_array[i] = temp_A[i];
-                A[((i+1)*DATA_WIDTH)-1 -: DATA_WIDTH] = temp_A[i];
-            end
-        end
-    endtask
-
-    task set_input_data_B;
-        input [DATA_WIDTH-1:0] b0, b1, b2, b3;
-        integer i;
-        begin
-            temp_B[0] = b0;
-            temp_B[1] = b1;
-            temp_B[2] = b2;
-            temp_B[3] = b3;
-            
-            for (i = 0; i < COLS; i = i + 1) begin
-                B_in_array[i] = temp_B[i];
-                B[((i+1)*DATA_WIDTH)-1 -: DATA_WIDTH] = temp_B[i];
-            end
-        end
-    endtask
-
-    // ÈÎÎñ£ºÏÔÊ¾ÊäÈëÊä³öÊı×é
-    task display_arrays;
-        integer i;
-        begin
-            $write("ÊäÈë: A_in_array = [");
-            for (i = 0; i < ROWS; i = i + 1) begin
-                $write("%0d", A_in_array[i]);
-                if (i < ROWS-1) $write(", ");
-            end
-            $write("]");
-            
-            $write("  B_in_array = [");
-            for (i = 0; i < COLS; i = i + 1) begin
-                $write("%0d", B_in_array[i]);
-                if (i < COLS-1) $write(", ");
-            end
-            $write("]\n");
-            
-            $write("Êä³ö: A_out_array = [");
-            for (i = 0; i < ROWS; i = i + 1) begin
-                $write("%0d", A_out_array[i]);
-                if (i < ROWS-1) $write(", ");
-            end
-            $write("]");
-            
-            $write("  B_out_array = [");
-            for (i = 0; i < COLS; i = i + 1) begin
-                $write("%0d", B_out_array[i]);
-                if (i < COLS-1) $write(", ");
-            end
-            $write("]");
-            
-            $display("  valid = %0d", valid);
-        end
-    endtask
-
-    // Ö÷²âÊÔ
+    // =========================
+    // 5. æµ‹è¯•æµç¨‹
+    // =========================
     initial begin
-        // ³õÊ¼»¯
+        // --- åˆå§‹åŒ– ---
         clk = 0;
         rst_n = 0;
         enable = 0;
-        A = 0;
-        B = 0;
+        load = 0;
+        data_flow = 0;
+        A_in = 0;
+        B_in = 0;
 
-        // ³õÊ¼»¯Êı×é
-        for (integer i = 0; i < ROWS; i = i + 1) begin
-            A_in_array[i] = 0;
-            A_out_array[i] = 0;
-            temp_A[i] = 0;
+        // é‡Šæ”¾å¤ä½
+        #20 rst_n = 1;
+
+        // ============================================================
+        // Case 1: WS æ¨¡å¼ - æƒé‡åŠ è½½æµ‹è¯• (Weight Load Bypass Check)
+        // ç›®æ ‡ï¼šéªŒè¯ B é€šé“æ˜¯å¦â€œå¯¹é½â€è¾“å‡ºï¼Œæ²¡æœ‰é˜¶æ¢¯å»¶è¿Ÿ
+        // ============================================================
+        $display("\n=== Test Case 1: WS Mode Weight Loading (Should act as Bypass) ===");
+        @(posedge clk);
+        enable <= 1;
+        data_flow <= 1; // WS Mode
+        load <= 1;      // Loading Phase
+
+        // æ„é€ è¾“å…¥æ•°æ®ï¼š
+        // A è¾“å…¥ 0 (åŠ è½½æƒé‡æ—¶ä¸å…³å¿ƒA)
+        // B è¾“å…¥å›ºå®šçš„æƒé‡å€¼: Col0=0x10, Col1=0x20, Col2=0x30, Col3=0x40
+        for (j=0; j<COLS; j=j+1) begin
+            B_in[((j+1)*DATA_WIDTH)-1 -: DATA_WIDTH] = (j+1) * 16; 
         end
-        for (integer i = 0; i < COLS; i = i + 1) begin
-            B_in_array[i] = 0;
-            B_out_array[i] = 0;
-            temp_B[i] = 0;
-        end
+        
+        @(posedge clk); // ç­‰å¾…æ•°æ®æ‰“å…¥
+        #1; // ç¨å¾®å»¶è¿Ÿä»¥ä¾¿è§‚å¯Ÿè¾“å‡º
+        
+        // æ£€æŸ¥è¾“å‡ºï¼šç†è®ºä¸Šåªéœ€è¦1ä¸ªæ—¶é’Ÿå‘¨æœŸï¼ˆåŸºç¡€å»¶è¿Ÿï¼‰ï¼Œæ‰€æœ‰åˆ—åº”è¯¥åŒæ—¶æœ‰æ•°æ®
+        display_output_status("WS Load (T+1)");
 
-        // ¸´Î»
-        #(CLK_PERIOD * 2);
-        rst_n = 1;
-        #(CLK_PERIOD);
+        @(posedge clk); 
+        #1;
+        display_output_status("WS Load (T+2)");
 
-        $display("=== Starting Test ===");
-        $display("Testing enable high for 4 cycles, input different A, B data each cycle");
 
-        // ½×¶Î1: enableÀ­¸ß4¸öÖÜÆÚ£¬Ã¿¸öÖÜÆÚÊäÈë²»Í¬Êı¾İ
-        $display("\n--- Phase 1: enable high for 4 cycles, input different data ---");
-        enable = 1;
+        // ============================================================
+        // Case 2: OS æ¨¡å¼ - è®¡ç®—æµæµ‹è¯• (OS Streaming Skew Check)
+        // ç›®æ ‡ï¼šéªŒè¯ A å’Œ B é€šé“æ˜¯å¦éƒ½å‘ˆç°â€œé˜¶æ¢¯çŠ¶â€å»¶è¿Ÿ
+        // ============================================================
+        $display("\n=== Test Case 2: OS Mode Streaming (Should act as Staircase) ===");
         
-        // ÖÜÆÚ1: ÊäÈëµÚÒ»×éÊı¾İ
-        set_input_data_A(1, 2, 3, 4);
-        set_input_data_B(5, 6, 7, 8);
-        #(CLK_PERIOD);
-        update_output_arrays();
-        $display("Cycle 1:");
-        display_arrays();
-        
-        // ÖÜÆÚ2: ÊäÈëµÚ¶ş×éÊı¾İ
-        set_input_data_A(10, 20, 30, 40);
-        set_input_data_B(50, 60, 70, 80);
-        #(CLK_PERIOD);
-        update_output_arrays();
-        $display("Cycle 2:");
-        display_arrays();
-        
-        // ÖÜÆÚ3: ÊäÈëµÚÈı×éÊı¾İ
-        set_input_data_A(100, 200, 300, 400);
-        set_input_data_B(500, 600, 700, 800);
-        #(CLK_PERIOD);
-        update_output_arrays();
-        $display("Cycle 3:");
-        display_arrays();
-        
-        // ÖÜÆÚ4: ÊäÈëµÚËÄ×éÊı¾İ
-        set_input_data_A(11, 22, 33, 44);
-        set_input_data_B(55, 66, 77, 88);
-        #(CLK_PERIOD);
-        update_output_arrays();
-        $display("Cycle 4:");
-        display_arrays();
+        // é‡ç½®ä¸€ä¸‹çŠ¶æ€
+        rst_n = 0; #10 rst_n = 1;
 
-        // ½×¶Î2: enableÀ­µÍ3¸öÖÜÆÚ£¬¹Û²ìÒÆÎ»Ğ§¹û
-        $display("\n--- Phase 2: enable low for 3 cycles, observe shifting ---");
-        enable = 0;
-        
-        // ÊäÈëÇåÁã
-        set_input_data_A(0, 0, 0, 0);
-        set_input_data_B(0, 0, 0, 0);
-        
-        #(CLK_PERIOD);
-        update_output_arrays();
-        $display("Cycle 5:");
-        display_arrays();
-        
-        #(CLK_PERIOD);
-        update_output_arrays();
-        $display("Cycle 6:");
-        display_arrays();
-        
-        #(CLK_PERIOD);
-        update_output_arrays();
-        $display("Cycle 7:");
-        display_arrays();
+        @(posedge clk);
+        enable <= 1;
+        data_flow <= 0; // OS Mode
+        load <= 0;      // Compute Phase
+
+        // æŒç»­å–‚å…¥æ•°æ®æµ
+        // æ¯ä¸ªå‘¨æœŸè¾“å…¥éƒ½åœ¨å˜ï¼Œæ–¹ä¾¿è§‚å¯ŸæµåŠ¨
+        fork 
+            begin
+                // æ¨¡æ‹Ÿå‘é€ 6 ä¸ªå‘¨æœŸçš„æ•°æ®
+                for (i=1; i<=6; i=i+1) begin
+                    // A è¾“å…¥: Row0=01, Row1=01... (æ¯è¡Œéƒ½ç»™ç›¸åŒå€¼ï¼Œæ–¹ä¾¿çœ‹åˆ—å»¶è¿Ÿ)
+                    // B è¾“å…¥: Col0=01, Col1=01...
+                    for (j=0; j<ROWS; j=j+1) A_in[((j+1)*DATA_WIDTH)-1 -: DATA_WIDTH] = i;
+                    for (j=0; j<COLS; j=j+1) B_in[((j+1)*DATA_WIDTH)-1 -: DATA_WIDTH] = i;
+                    
+                    @(posedge clk); // ç­‰å¾…ä¸‹ä¸€ä¸ªæ—¶é’Ÿ
+                    #1; // é‡‡æ ·ç‚¹
+                    display_output_status($sformatf("OS Stream Input=%0d", i));
+                end
+                // åœæ­¢è¾“å…¥
+                A_in = 0;
+                B_in = 0;
+                #50;
+            end
+        join
 
         $display("\n=== Test Finished ===");
-        #(CLK_PERIOD * 2);
         $finish;
     end
 
-    // ²¨ĞÎ¼ÇÂ¼
-    initial begin
-        $dumpfile("tb_Systolic_input_controller.vcd");
-        $dumpvars(0, tb_Systolic_input_controller);
-    end
+    // =========================
+    // 6. è¾…åŠ©æ˜¾ç¤ºä»»åŠ¡
+    // =========================
+    // ç”¨äºæ‰“å°å½“å‰æ—¶åˆ»æ‰€æœ‰ç«¯å£çš„è¾“å‡ºå€¼ï¼Œæ¨¡æ‹Ÿæ³¢å½¢å›¾
+    task display_output_status;
+        input [127:0] tag;
+        integer k;
+        reg [DATA_WIDTH-1:0] val_a, val_b;
+        begin
+            $write("Time %0t | %s | ", $time, tag);
+            
+            $write("A_Out: [ ");
+            for (k=0; k<ROWS; k=k+1) begin
+                val_a = A_out[((k+1)*DATA_WIDTH)-1 -: DATA_WIDTH];
+                $write("%2h ", val_a);
+            end
+            $write("] (Row0->Row3) | ");
+
+            $write("B_Out: [ ");
+            for (k=0; k<COLS; k=k+1) begin
+                val_b = B_out[((k+1)*DATA_WIDTH)-1 -: DATA_WIDTH];
+                $write("%2h ", val_b);
+            end
+            $write("] (Col0->Col3)\n");
+        end
+    endtask
 
 endmodule

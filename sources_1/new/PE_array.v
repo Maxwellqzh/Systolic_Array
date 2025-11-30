@@ -22,130 +22,110 @@ module PE_Array #(
 )(
     input clk,
     input rst_n,
-    input en,  // 输入使能信号,当最后一组数据输入后，使能拉低
-
-    // 左侧输入 A（按行输入），展平为一维向量
-    // 排列方式：A[0], A[1], ..., A[ROWS-1]
+    
+    // --- 控制信号 (由外部 Controller 提供) ---
+    input data_flow,     // 1: WS Mode, 0: OS Mode
+    input load,          // WS Weight Loading
+    input drain,         // OS Result Draining
+    
+    // --- 数据输入 ---
+    // A (Left Input): 每一行一个 8-bit 数据
     input signed [ROWS*DATA_WIDTH-1:0] A,
 
-    // 顶部输入 B（按列输入），展平为一维向量  
-    // 排列方式：B[0], B[1], ..., B[COLS-1]
+    // B (Top Input): 每一列一个 8-bit 数据
     input signed [COLS*DATA_WIDTH-1:0] B,
 
-    // 输出矩阵 C（累加），展平为一维向量
-    // 排列方式：C[0][0], C[0][1], ..., C[0][COLS-1], C[1][0], ...
-    output signed [ROWS*COLS*2*DATA_WIDTH-1:0] C,
+    // --- 数据输出 ---
+    // C (Bottom Output): 每一列一个 16-bit 输出
+    // 注意：结果是从底部像流水线一样流出来的，不再是整个矩阵并行输出
+    output signed [COLS*2*DATA_WIDTH-1:0] C_out,
     
-    output valid  // 输出有效信号
+    // 调试/级联用：最右侧的 A 输出 (可选)
+    output signed [ROWS*DATA_WIDTH-1:0] A_pass_out
 );
 
-// 内部连接信号
-wire signed [DATA_WIDTH-1:0] A_2d [0:ROWS-1];
-wire signed [DATA_WIDTH-1:0] B_2d [0:COLS-1];
-wire signed [2*DATA_WIDTH-1:0] C_2d [0:ROWS-1][0:COLS-1];
+    // =========================================================
+    // 1. 内部连线定义 (Interconnects)
+    // =========================================================
+    // 水平连线 (Horizontal Wires): 传递 A
+    // 尺寸: [ROWS] 行 x [COLS+1] 列 (包含最左输入和最右输出)
+    wire signed [DATA_WIDTH-1:0] w_hor [0:ROWS-1][0:COLS];
 
-// PE之间的连接信号
-wire signed [DATA_WIDTH-1:0] a_horizontal [0:ROWS-1][0:COLS];  // 水平方向传播的A数据
-wire signed [DATA_WIDTH-1:0] b_vertical   [0:ROWS][0:COLS-1];  // 垂直方向传播的B数据
+    // 垂直连线 (Vertical Wires): 传递 B / Partial Sum / Result
+    // 尺寸: [ROWS+1] 行 x [COLS] 列 (包含最顶输入和最底输出)
+    // 注意位宽是 2*DATA_WIDTH (16-bit)
+    wire signed [2*DATA_WIDTH-1:0] w_ver [0:ROWS][0:COLS-1];
 
-// 流水线控制信号
-reg [ROWS+COLS-1:0] pipeline_valid;  // 流水线有效标志
-wire computation_done;  // 计算完成信号
+    // =========================================================
+    // 2. 边界输入处理 (Boundary Inputs)
+    // =========================================================
+    
+    genvar i, j;
+    generate
+        // --- 左侧输入 A ---
+        for (i = 0; i < ROWS; i = i + 1) begin : A_Input_Map
+            assign w_hor[i][0] = A[((i+1)*DATA_WIDTH)-1 -: DATA_WIDTH];
+        end
 
-// 计算流水线深度（数据从输入到输出需要的时间）
-localparam PIPELINE_DEPTH = ROWS + COLS - 1;
+        // --- 顶部输入 B / Partial Sum ---
+        for (j = 0; j < COLS; j = j + 1) begin : B_Input_Map
+            wire signed [DATA_WIDTH-1:0] b_curr_col;
+            assign b_curr_col = B[((j+1)*DATA_WIDTH)-1 -: DATA_WIDTH];
 
-// 将输入A展平到二维数组
-genvar i, j;
-generate
-    for (i = 0; i < ROWS; i = i + 1) begin : A_reshape
-        assign A_2d[i] = A[(i+1)*DATA_WIDTH-1 : i*DATA_WIDTH];
-    end
-    
-    // 将输入B展平到二维数组  
-    for (i = 0; i < COLS; i = i + 1) begin : B_reshape
-        assign B_2d[i] = B[(i+1)*DATA_WIDTH-1 : i*DATA_WIDTH];
-    end
-    
-    // 连接输入到PE阵列边界
-    for (i = 0; i < ROWS; i = i + 1) begin : A_input_conn
-        assign a_horizontal[i][0] = A_2d[i];  // 每行的第一个PE接收外部A输入
-    end
-    
-    for (j = 0; j < COLS; j = j + 1) begin : B_input_conn
-        assign b_vertical[0][j] = B_2d[j];    // 每列的第一个PE接收外部B输入
-    end
-    
-    // 生成PE阵列
-    for (i = 0; i < ROWS; i = i + 1) begin : row_gen
-        for (j = 0; j < COLS; j = j + 1) begin : col_gen
-            PE_Core #(
-                .DATA_WIDTH(DATA_WIDTH)
-            ) PE_inst (
-                .clk(clk),
-                .rst_n(rst_n),
-                .a_curr(a_horizontal[i][j]),      // 当前PE的A输入
-                .b_curr(b_vertical[i][j]),        // 当前PE的B输入
-                .a_last(a_horizontal[i][j+1]),    // A输出到右侧PE
-                .b_last(b_vertical[i+1][j]),      // B输出到下方PE
-                .data_out(C_2d[i][j])             // 计算结果输出
-            );
+            // 逻辑选择：
+            // Case 1: WS计算模式 (data_flow=1, load=0) -> 输入必须是 0 (部分和初始值)
+            // Case 2: 其他情况 (WS加载 / OS模式) -> 输入是 B (扩展到16位)
+            // 注意符号扩展 (Sign Extension)
             
+            assign w_ver[0][j] = (data_flow && !load) ? 
+                                 {(2*DATA_WIDTH){1'b0}} :  // WS计算: 喂0
+                                 {{DATA_WIDTH{b_curr_col[DATA_WIDTH-1]}}, b_curr_col}; // 其他: 喂B (符号扩展)
         end
-    end
-    
-    // 将输出C_2d展平到一维输出向量
-    for (i = 0; i < ROWS; i = i + 1) begin : C_output_row
-        for (j = 0; j < COLS; j = j + 1) begin : C_output_col
-            assign C[((i*COLS + j) + 1) * (2*DATA_WIDTH) - 1 : 
-                     (i*COLS + j) * (2*DATA_WIDTH)] = C_2d[i][j];
+    endgenerate
+
+    // =========================================================
+    // 3. PE 阵列生成 (Array Instantiation)
+    // =========================================================
+    generate
+        for (i = 0; i < ROWS; i = i + 1) begin : Row_Gen
+            for (j = 0; j < COLS; j = j + 1) begin : Col_Gen
+                
+                PE_Core #(
+                    .DATA_WIDTH(DATA_WIDTH)
+                ) u_pe (
+                    .clk(clk),
+                    .rst_n(rst_n),
+                    
+                    // 控制信号广播
+                    .data_flow(data_flow),
+                    .load(load),
+                    .drain(drain),
+                    
+                    // 数据连接
+                    .left (w_hor[i][j]),       // 来自左边
+                    .up   (w_ver[i][j]),       // 来自上面
+                    .right(w_hor[i][j+1]),     // 传给右边
+                    .down (w_ver[i+1][j])      // 传给下面
+                );
+                
+            end
         end
-    end
-    
-endgenerate
+    endgenerate
 
-// 输出有效信号：当计算完成且输入使能已经拉低（表示这是最后一组数据）
-reg en_delayed;
-always @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
-        en_delayed <= 0;
-    end else begin
-        en_delayed <= en;
-    end
-end
+    // =========================================================
+    // 4. 边界输出处理 (Boundary Outputs)
+    // =========================================================
+    generate
+        // --- 底部输出 (Result / Drain) ---
+        // 取出 w_ver 的最后一行
+        for (j = 0; j < COLS; j = j + 1) begin : C_Output_Map
+            assign C_out[((j+1)*2*DATA_WIDTH)-1 -: 2*DATA_WIDTH] = w_ver[ROWS][j];
+        end
 
-// 检测en的下降沿（从高到低）
-wire en_falling_edge = en_delayed && !en;
-
-// 流水线有效标志控制
-always @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
-        pipeline_valid <= 0;
-    end else begin
-        // 移位寄存器，跟踪数据在流水线中的位置
-        pipeline_valid <= {pipeline_valid[ROWS+COLS-2:0], en_falling_edge};
-    end
-end
-
-// 计算完成判断：当最后一个PE的数据有效时，整个计算完成
-assign computation_done = pipeline_valid[PIPELINE_DEPTH-1];
-
-
-// 有效信号生成：当检测到en下降沿后，等待计算完成
-reg valid_generation;
-always @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
-        valid_generation <= 0;
-    end else if (en_falling_edge) begin
-        // 检测到en下降沿，开始等待计算完成
-        valid_generation <= 1;
-    end else if (computation_done && valid_generation) begin
-        // 计算完成，清除有效生成标志
-        valid_generation <= 0;
-    end
-end
-
-// 最终有效信号输出
-assign valid = computation_done && valid_generation;
+        // --- 右侧输出 (A透传，通常用于调试或级联) ---
+        for (i = 0; i < ROWS; i = i + 1) begin : A_Pass_Map
+            assign A_pass_out[((i+1)*DATA_WIDTH)-1 -: DATA_WIDTH] = w_hor[i][COLS];
+        end
+    endgenerate
 
 endmodule
