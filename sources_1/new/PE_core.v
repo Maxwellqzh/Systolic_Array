@@ -14,9 +14,7 @@
 // output:
 //      right: 水平输出A
 //      down: 垂直输出，Load模式下传递权重，计算模式下输出累加结果
-//      ps_reg: OS模式下输出累加结果
 
-`timescale 1ns / 1ps
 `timescale 1ns / 1ps
 
 module PE_Core #(
@@ -36,6 +34,8 @@ module PE_Core #(
 
     reg signed [DATA_WIDTH-1:0] weight_reg; 
     reg signed [2*DATA_WIDTH-1:0] ps_reg;   
+    reg drain_1d;
+    wire drain_neg;
     wire signed [2*DATA_WIDTH-1:0] temp_result;
 
     // 定义实际进入乘法器B端口的信号
@@ -53,6 +53,16 @@ module PE_Core #(
         .B(mult_input_b), // 使用选择后的信号
         .P(temp_result)
     );
+
+    always@(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            drain_1d <= 0;
+        end else begin
+            drain_1d <= drain;
+        end
+    end
+
+    assign drain_neg = drain_1d && !drain;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -83,11 +93,18 @@ module PE_Core #(
                 // ========================
                 // 权重必须流动 (传递给下方PE)
                 down <= up; 
-                if (drain) begin
+                if (drain || drain_1d) begin
                     // 结算模式：停止累加，将结果通过 down 吐出去
                     // 此时 down 被借用来传输结果，不再传权重
-                    down <= ps_reg; 
-                    ps_reg <= 0; // 清零，为下一轮做准备
+                    // 如果drain的最后一个周期，代表结果输出完成，将中间累计清零
+                    if(drain_1d)
+                        down <= up; 
+                    else
+                        down <= ps_reg; 
+                    if(drain_neg)      
+                        ps_reg <= 0;
+                    else
+                        ps_reg <= ps_reg;
                 end else begin
                     // 累加模式
                     ps_reg <= ps_reg + temp_result;
