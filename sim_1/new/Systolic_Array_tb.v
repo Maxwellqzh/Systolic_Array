@@ -2,13 +2,13 @@
 
 module tb_Systolic_Array;
 
-    // ²ÎÊı¶¨Òå
+    // å‚æ•°å®šä¹‰
     parameter DATA_WIDTH = 8;
     parameter ROWS = 8;
     parameter COLS = 8;
     parameter CLK_PERIOD = 10;
 
-    // ĞÅºÅ¶¨Òå
+    // ä¿¡å·å®šä¹‰
     reg clk;
     reg rst_n;
     reg enable;
@@ -17,16 +17,16 @@ module tb_Systolic_Array;
     wire valid;
     wire signed [2*DATA_WIDTH*ROWS*COLS-1:0] C;
 
-    // ÊäÈëÊä³öÊı×é±äÁ¿£¨·½±ã²é¿´£©
+    // è¾“å…¥è¾“å‡ºæ•°ç»„å˜é‡ï¼ˆæ–¹ä¾¿æŸ¥çœ‹ï¼‰
     reg [DATA_WIDTH-1:0] A_in_array [0:ROWS-1];
     reg [DATA_WIDTH-1:0] B_in_array [0:COLS-1];
     reg [2*DATA_WIDTH-1:0] C_out_array [0:ROWS-1][0:COLS-1];
 
-    // ÁÙÊ±Êı×é±äÁ¿
+    // ä¸´æ—¶æ•°ç»„å˜é‡
     reg [DATA_WIDTH-1:0] temp_A [0:ROWS-1];
     reg [DATA_WIDTH-1:0] temp_B [0:COLS-1];
 
-    // ÊµÀı»¯±»²âÄ£¿é
+    // å®ä¾‹åŒ–è¢«æµ‹æ¨¡å—
     Systolic_Array #(
         .DATA_WIDTH(DATA_WIDTH),
         .ROWS(ROWS),
@@ -41,10 +41,10 @@ module tb_Systolic_Array;
         .C(C)
     );
 
-    // Ê±ÖÓÉú³É
+    // æ—¶é’Ÿç”Ÿæˆ
     always #(CLK_PERIOD/2) clk = ~clk;
 
-    // ÈÎÎñ£º½«Êä³öÏòÁ¿×ª»»Îª¶şÎ¬Êı×é
+    // ä»»åŠ¡ï¼šå°†è¾“å‡ºå‘é‡è½¬æ¢ä¸ºäºŒç»´æ•°ç»„
     task update_output_arrays;
         integer i, j;
         begin
@@ -56,7 +56,7 @@ module tb_Systolic_Array;
         end
     endtask
 
-    // ÈÎÎñ£ºÉèÖÃÊäÈëÊı¾İA
+    // ä»»åŠ¡ï¼šè®¾ç½®è¾“å…¥æ•°æ®A
     task set_input_data_A;
         input [DATA_WIDTH-1:0] a0, a1, a2, a3, a4, a5, a6, a7;
         integer i;
@@ -77,7 +77,7 @@ module tb_Systolic_Array;
         end
     endtask
 
-    // ÈÎÎñ£ºÉèÖÃÊäÈëÊı¾İB
+    // ä»»åŠ¡ï¼šè®¾ç½®è¾“å…¥æ•°æ®B
     task set_input_data_B;
         input [DATA_WIDTH-1:0] b0, b1, b2, b3, b4, b5, b6, b7;
         integer i;
@@ -98,7 +98,7 @@ module tb_Systolic_Array;
         end
     endtask
 
-    // ÈÎÎñ£ºÏÔÊ¾ÊäÈëÊı×é
+    // ä»»åŠ¡ï¼šæ˜¾ç¤ºè¾“å…¥æ•°ç»„
     task display_input_arrays;
         integer i;
         begin
@@ -118,12 +118,12 @@ module tb_Systolic_Array;
         end
     endtask
 
-    // ÈÎÎñ£ºÏÔÊ¾Êä³ö¾ØÕó£¨¼ò»¯ÏÔÊ¾£¬Ö»ÏÔÊ¾²¿·ÖĞÅÏ¢£©
+    // ä»»åŠ¡ï¼šæ˜¾ç¤ºè¾“å‡ºçŸ©é˜µï¼ˆç®€åŒ–æ˜¾ç¤ºï¼Œåªæ˜¾ç¤ºéƒ¨åˆ†ä¿¡æ¯ï¼‰
     task display_output_matrix;
         integer i, j;
         begin
             $display("Output matrix C (valid = %0d):", valid);
-            // Ö»ÏÔÊ¾Ç°4ĞĞÇ°4ÁĞ£¬±ÜÃâÊä³öÌ«³¤
+            // åªæ˜¾ç¤ºå‰4è¡Œå‰4åˆ—ï¼Œé¿å…è¾“å‡ºå¤ªé•¿
             for (i = 0; i < 4; i = i + 1) begin
                 $write("    [");
                 for (j = 0; j < 4; j = j + 1) begin
@@ -138,16 +138,16 @@ module tb_Systolic_Array;
         end
     endtask
 
-    // Ö÷²âÊÔ
+    // ä¸»æµ‹è¯•
     initial begin
-        // ³õÊ¼»¯
+        // åˆå§‹åŒ–
         clk = 0;
         rst_n = 0;
         enable = 0;
         A = 0;
         B = 0;
 
-        // ³õÊ¼»¯Êı×é
+        // åˆå§‹åŒ–æ•°ç»„
         for (integer i = 0; i < ROWS; i = i + 1) begin
             A_in_array[i] = 0;
             temp_A[i] = 0;
@@ -160,7 +160,7 @@ module tb_Systolic_Array;
             temp_B[i] = 0;
         end
 
-        // ¸´Î»
+        // å¤ä½
         #(CLK_PERIOD * 2);
         rst_n = 1;
         #(CLK_PERIOD);
@@ -168,11 +168,11 @@ module tb_Systolic_Array;
         $display("=== Starting 8x8 Systolic_Array Test ===");
         $display("Testing enable high for 8 cycles, input different A, B data each cycle");
 
-        // ½×¶Î1: enableÀ­¸ß8¸öÖÜÆÚ£¬Ã¿¸öÖÜÆÚÊäÈë²»Í¬Êı¾İ
+        // é˜¶æ®µ1: enableæ‹‰é«˜8ä¸ªå‘¨æœŸï¼Œæ¯ä¸ªå‘¨æœŸè¾“å…¥ä¸åŒæ•°æ®
         $display("\n--- Phase 1: enable high for 8 cycles, input different data ---");
         enable = 1;
         
-        // ÖÜÆÚ1-8: ÊäÈë²»Í¬µÄÊı¾İ
+        // å‘¨æœŸ1-8: è¾“å…¥ä¸åŒçš„æ•°æ®
         set_input_data_A(1, 2, 3, 4, 5, 6, 7, 8);
         set_input_data_B(1, 2, 3, 4, 5, 6, 7, 8);
         #(CLK_PERIOD);
@@ -237,15 +237,15 @@ module tb_Systolic_Array;
         display_input_arrays();
         display_output_matrix();
 
-        // ½×¶Î2: enableÀ­µÍ¶à¸öÖÜÆÚ£¬µÈ´ı¼ÆËã½á¹û
+        // é˜¶æ®µ2: enableæ‹‰ä½å¤šä¸ªå‘¨æœŸï¼Œç­‰å¾…è®¡ç®—ç»“æœ
         $display("\n--- Phase 2: enable low, waiting for calculation results ---");
         enable = 0;
         
-        // ÊäÈëÇåÁã
+        // è¾“å…¥æ¸…é›¶
         set_input_data_A(0, 0, 0, 0, 0, 0, 0, 0);
         set_input_data_B(0, 0, 0, 0, 0, 0, 0, 0);
         
-        // ¹Û²ì¶à¸öÖÜÆÚµÄÊä³ö±ä»¯£¨8x8ÕóÁĞĞèÒª¸ü¶àÖÜÆÚ£©
+        // è§‚å¯Ÿå¤šä¸ªå‘¨æœŸçš„è¾“å‡ºå˜åŒ–ï¼ˆ8x8é˜µåˆ—éœ€è¦æ›´å¤šå‘¨æœŸï¼‰
         repeat(20) begin
             #(CLK_PERIOD);
             update_output_arrays();
@@ -259,7 +259,7 @@ module tb_Systolic_Array;
         $finish;
     end
 
-    // ²¨ĞÎ¼ÇÂ¼
+    // æ³¢å½¢è®°å½•
     initial begin
         $dumpfile("tb_Systolic_Array_8x8.vcd");
         $dumpvars(0, tb_Systolic_Array);

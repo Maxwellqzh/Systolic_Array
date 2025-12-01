@@ -1,167 +1,231 @@
 `timescale 1ns / 1ps
 
-module tb_Systolic_Input_Controller;
+module tb_Systolic_input_controller;
 
-    // =========================
-    // 1. 参数定义
-    // =========================
+    // 参数定义
     parameter DATA_WIDTH = 8;
-    parameter ROWS = 4; // 为了方便观察波形，我们用 4x4 的规模
+    parameter ROWS = 4;
     parameter COLS = 4;
+    parameter CLK_PERIOD = 10;
 
-    // =========================
-    // 2. 信号声明
-    // =========================
+    // 信号定义
     reg clk;
     reg rst_n;
     reg enable;
-    reg load;
-    reg data_flow;
-
-    // 展平的输入/输出向量
-    reg  signed [DATA_WIDTH*ROWS-1:0] A_in;
-    reg  signed [DATA_WIDTH*COLS-1:0] B_in;
+    reg signed [DATA_WIDTH*ROWS-1:0] A;
+    reg signed [DATA_WIDTH*COLS-1:0] B;
     wire signed [DATA_WIDTH*ROWS-1:0] A_out;
     wire signed [DATA_WIDTH*COLS-1:0] B_out;
     wire valid;
 
-    // 辅助变量：用于生成测试数据
-    integer i, j;
+    // 输入输出数组变量（方便查看）
+    reg [DATA_WIDTH-1:0] A_in_array [0:ROWS-1];
+    reg [DATA_WIDTH-1:0] B_in_array [0:COLS-1];
+    reg [DATA_WIDTH-1:0] A_out_array [0:ROWS-1];
+    reg [DATA_WIDTH-1:0] B_out_array [0:COLS-1];
 
-    // =========================
-    // 3. 实例化 DUT (Device Under Test)
-    // =========================
-    Systolic_Input_Controller #(
+    // 临时数组变量
+    reg [DATA_WIDTH-1:0] temp_A [0:ROWS-1];
+    reg [DATA_WIDTH-1:0] temp_B [0:COLS-1];
+
+    // 实例化被测模块
+    Systolic_input_controller #(
         .DATA_WIDTH(DATA_WIDTH),
         .ROWS(ROWS),
         .COLS(COLS)
-    ) u_controller (
+    ) uut (
         .clk(clk),
         .rst_n(rst_n),
         .enable(enable),
-        .load(load),
-        .data_flow(data_flow),
-        .A(A_in),
-        .B(B_in),
+        .A(A),
+        .B(B),
         .A_out(A_out),
         .B_out(B_out),
         .valid(valid)
     );
 
-    // =========================
-    // 4. 时钟生成 (10ns 周期)
-    // =========================
-    always #5 clk = ~clk;
+    // 时钟生成
+    always #(CLK_PERIOD/2) clk = ~clk;
 
-    // =========================
-    // 5. 测试流程
-    // =========================
+    // 任务：将输出向量转换为数组
+    task update_output_arrays;
+        integer i;
+        begin
+            for (i = 0; i < ROWS; i = i + 1) begin
+                A_out_array[i] = A_out[((i+1)*DATA_WIDTH)-1 -: DATA_WIDTH];
+            end
+            for (i = 0; i < COLS; i = i + 1) begin
+                B_out_array[i] = B_out[((i+1)*DATA_WIDTH)-1 -: DATA_WIDTH];
+            end
+        end
+    endtask
+
+    // 任务：设置输入数据
+    task set_input_data_A;
+        input [DATA_WIDTH-1:0] a0, a1, a2, a3;
+        integer i;
+        begin
+            temp_A[0] = a0;
+            temp_A[1] = a1;
+            temp_A[2] = a2;
+            temp_A[3] = a3;
+            
+            for (i = 0; i < ROWS; i = i + 1) begin
+                A_in_array[i] = temp_A[i];
+                A[((i+1)*DATA_WIDTH)-1 -: DATA_WIDTH] = temp_A[i];
+            end
+        end
+    endtask
+
+    task set_input_data_B;
+        input [DATA_WIDTH-1:0] b0, b1, b2, b3;
+        integer i;
+        begin
+            temp_B[0] = b0;
+            temp_B[1] = b1;
+            temp_B[2] = b2;
+            temp_B[3] = b3;
+            
+            for (i = 0; i < COLS; i = i + 1) begin
+                B_in_array[i] = temp_B[i];
+                B[((i+1)*DATA_WIDTH)-1 -: DATA_WIDTH] = temp_B[i];
+            end
+        end
+    endtask
+
+    // 任务：显示输入输出数组
+    task display_arrays;
+        integer i;
+        begin
+            $write("输入: A_in_array = [");
+            for (i = 0; i < ROWS; i = i + 1) begin
+                $write("%0d", A_in_array[i]);
+                if (i < ROWS-1) $write(", ");
+            end
+            $write("]");
+            
+            $write("  B_in_array = [");
+            for (i = 0; i < COLS; i = i + 1) begin
+                $write("%0d", B_in_array[i]);
+                if (i < COLS-1) $write(", ");
+            end
+            $write("]\n");
+            
+            $write("输出: A_out_array = [");
+            for (i = 0; i < ROWS; i = i + 1) begin
+                $write("%0d", A_out_array[i]);
+                if (i < ROWS-1) $write(", ");
+            end
+            $write("]");
+            
+            $write("  B_out_array = [");
+            for (i = 0; i < COLS; i = i + 1) begin
+                $write("%0d", B_out_array[i]);
+                if (i < COLS-1) $write(", ");
+            end
+            $write("]");
+            
+            $display("  valid = %0d", valid);
+        end
+    endtask
+
+    // 主测试
     initial begin
-        // --- 初始化 ---
+        // 初始化
         clk = 0;
         rst_n = 0;
         enable = 0;
-        load = 0;
-        data_flow = 0;
-        A_in = 0;
-        B_in = 0;
+        A = 0;
+        B = 0;
 
-        // 释放复位
-        #20 rst_n = 1;
-
-        // ============================================================
-        // Case 1: WS 模式 - 权重加载测试 (Weight Load Bypass Check)
-        // 目标：验证 B 通道是否“对齐”输出，没有阶梯延迟
-        // ============================================================
-        $display("\n=== Test Case 1: WS Mode Weight Loading (Should act as Bypass) ===");
-        @(posedge clk);
-        enable <= 1;
-        data_flow <= 1; // WS Mode
-        load <= 1;      // Loading Phase
-
-        // 构造输入数据：
-        // A 输入 0 (加载权重时不关心A)
-        // B 输入固定的权重值: Col0=0x10, Col1=0x20, Col2=0x30, Col3=0x40
-        for (j=0; j<COLS; j=j+1) begin
-            B_in[((j+1)*DATA_WIDTH)-1 -: DATA_WIDTH] = (j+1) * 16; 
+        // 初始化数组
+        for (integer i = 0; i < ROWS; i = i + 1) begin
+            A_in_array[i] = 0;
+            A_out_array[i] = 0;
+            temp_A[i] = 0;
         end
+        for (integer i = 0; i < COLS; i = i + 1) begin
+            B_in_array[i] = 0;
+            B_out_array[i] = 0;
+            temp_B[i] = 0;
+        end
+
+        // 复位
+        #(CLK_PERIOD * 2);
+        rst_n = 1;
+        #(CLK_PERIOD);
+
+        $display("=== Starting Test ===");
+        $display("Testing enable high for 4 cycles, input different A, B data each cycle");
+
+        // 阶段1: enable拉高4个周期，每个周期输入不同数据
+        $display("\n--- Phase 1: enable high for 4 cycles, input different data ---");
+        enable = 1;
         
-        @(posedge clk); // 等待数据打入
-        #1; // 稍微延迟以便观察输出
+        // 周期1: 输入第一组数据
+        set_input_data_A(1, 2, 3, 4);
+        set_input_data_B(5, 6, 7, 8);
+        #(CLK_PERIOD);
+        update_output_arrays();
+        $display("Cycle 1:");
+        display_arrays();
         
-        // 检查输出：理论上只需要1个时钟周期（基础延迟），所有列应该同时有数据
-        display_output_status("WS Load (T+1)");
-
-        @(posedge clk); 
-        #1;
-        display_output_status("WS Load (T+2)");
-
-
-        // ============================================================
-        // Case 2: OS 模式 - 计算流测试 (OS Streaming Skew Check)
-        // 目标：验证 A 和 B 通道是否都呈现“阶梯状”延迟
-        // ============================================================
-        $display("\n=== Test Case 2: OS Mode Streaming (Should act as Staircase) ===");
+        // 周期2: 输入第二组数据
+        set_input_data_A(10, 20, 30, 40);
+        set_input_data_B(50, 60, 70, 80);
+        #(CLK_PERIOD);
+        update_output_arrays();
+        $display("Cycle 2:");
+        display_arrays();
         
-        // 重置一下状态
-        rst_n = 0; #10 rst_n = 1;
+        // 周期3: 输入第三组数据
+        set_input_data_A(100, 200, 300, 400);
+        set_input_data_B(500, 600, 700, 800);
+        #(CLK_PERIOD);
+        update_output_arrays();
+        $display("Cycle 3:");
+        display_arrays();
+        
+        // 周期4: 输入第四组数据
+        set_input_data_A(11, 22, 33, 44);
+        set_input_data_B(55, 66, 77, 88);
+        #(CLK_PERIOD);
+        update_output_arrays();
+        $display("Cycle 4:");
+        display_arrays();
 
-        @(posedge clk);
-        enable <= 1;
-        data_flow <= 0; // OS Mode
-        load <= 0;      // Compute Phase
-
-        // 持续喂入数据流
-        // 每个周期输入都在变，方便观察流动
-        fork 
-            begin
-                // 模拟发送 6 个周期的数据
-                for (i=1; i<=6; i=i+1) begin
-                    // A 输入: Row0=01, Row1=01... (每行都给相同值，方便看列延迟)
-                    // B 输入: Col0=01, Col1=01...
-                    for (j=0; j<ROWS; j=j+1) A_in[((j+1)*DATA_WIDTH)-1 -: DATA_WIDTH] = i;
-                    for (j=0; j<COLS; j=j+1) B_in[((j+1)*DATA_WIDTH)-1 -: DATA_WIDTH] = i;
-                    
-                    @(posedge clk); // 等待下一个时钟
-                    #1; // 采样点
-                    display_output_status($sformatf("OS Stream Input=%0d", i));
-                end
-                // 停止输入
-                A_in = 0;
-                B_in = 0;
-                #50;
-            end
-        join
+        // 阶段2: enable拉低3个周期，观察移位效果
+        $display("\n--- Phase 2: enable low for 3 cycles, observe shifting ---");
+        enable = 0;
+        
+        // 输入清零
+        set_input_data_A(0, 0, 0, 0);
+        set_input_data_B(0, 0, 0, 0);
+        
+        #(CLK_PERIOD);
+        update_output_arrays();
+        $display("Cycle 5:");
+        display_arrays();
+        
+        #(CLK_PERIOD);
+        update_output_arrays();
+        $display("Cycle 6:");
+        display_arrays();
+        
+        #(CLK_PERIOD);
+        update_output_arrays();
+        $display("Cycle 7:");
+        display_arrays();
 
         $display("\n=== Test Finished ===");
+        #(CLK_PERIOD * 2);
         $finish;
     end
 
-    // =========================
-    // 6. 辅助显示任务
-    // =========================
-    // 用于打印当前时刻所有端口的输出值，模拟波形图
-    task display_output_status;
-        input [127:0] tag;
-        integer k;
-        reg [DATA_WIDTH-1:0] val_a, val_b;
-        begin
-            $write("Time %0t | %s | ", $time, tag);
-            
-            $write("A_Out: [ ");
-            for (k=0; k<ROWS; k=k+1) begin
-                val_a = A_out[((k+1)*DATA_WIDTH)-1 -: DATA_WIDTH];
-                $write("%2h ", val_a);
-            end
-            $write("] (Row0->Row3) | ");
-
-            $write("B_Out: [ ");
-            for (k=0; k<COLS; k=k+1) begin
-                val_b = B_out[((k+1)*DATA_WIDTH)-1 -: DATA_WIDTH];
-                $write("%2h ", val_b);
-            end
-            $write("] (Col0->Col3)\n");
-        end
-    endtask
+    // 波形记录
+    initial begin
+        $dumpfile("tb_Systolic_input_controller.vcd");
+        $dumpvars(0, tb_Systolic_input_controller);
+    end
 
 endmodule

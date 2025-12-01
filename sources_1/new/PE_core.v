@@ -2,18 +2,18 @@
 // Create Date:   2025/11/24
 // Design Name:   PE_core
 // Module Name:   PE_Core
-// Description:   ÓÃÓÚ¼ÆËãÁ½¸ö8Î»ÓĞ·ûºÅÊıÏà³Ë£¬½«ÊäÈë´«µİ¸øÏÂÒ»¸öµ¥Ôª£¬²¢ÀÛ¼Ó½á¹û£¬Ö§³ÖWSºÍOSÁ½ÖÖÄ£Ê½
+// Description:   ç”¨äºè®¡ç®—ä¸¤ä¸ª8ä½æœ‰ç¬¦å·æ•°ç›¸ä¹˜ï¼Œå°†è¾“å…¥ä¼ é€’ç»™ä¸‹ä¸€ä¸ªå•å…ƒï¼Œå¹¶ç´¯åŠ ç»“æœï¼Œæ”¯æŒWSå’ŒOSä¸¤ç§æ¨¡å¼
 // input:
-//      clk: Ê±ÖÓĞÅºÅ
-//      rst_n: ¸´Î»ĞÅºÅ'
-//      drain: ½á¹ûÊä³öÊ¹ÄÜĞÅºÅ,¸ßµçÆ½Ê±OS×´Ì¬½«½á¹ûÊä³ö
-//      data_flow: Ä£Ê½Ñ¡ÔñĞÅºÅ£¬1ÎªWSÄ£Ê½£¬0ÎªOSÄ£Ê½
-//      load: È¨ÖØ¼ÓÔØÊ¹ÄÜĞÅºÅ,¸ßµçÆ½Ê±½«data_inÊäÈë×÷ÎªÈ¨ÖØÊäÈë
-//      left: Ë®Æ½ÊäÈëA
-//      up: ´¹Ö±ÊäÈë£¬LoadÄ£Ê½ÏÂÎªÈ¨ÖØ£¬¼ÆËãÄ£Ê½ÏÂÎªÉÏ·½´«À´µÄPartial Sum
+//      clk: æ—¶é’Ÿä¿¡å·
+//      rst_n: å¤ä½ä¿¡å·'
+//      drain: ç»“æœè¾“å‡ºä½¿èƒ½ä¿¡å·,é«˜ç”µå¹³æ—¶OSçŠ¶æ€å°†ç»“æœè¾“å‡º
+//      data_flow: æ¨¡å¼é€‰æ‹©ä¿¡å·ï¼Œ1ä¸ºWSæ¨¡å¼ï¼Œ0ä¸ºOSæ¨¡å¼
+//      load: æƒé‡åŠ è½½ä½¿èƒ½ä¿¡å·,é«˜ç”µå¹³æ—¶å°†data_inè¾“å…¥ä½œä¸ºæƒé‡è¾“å…¥
+//      left: æ°´å¹³è¾“å…¥A
+//      up: å‚ç›´è¾“å…¥ï¼ŒLoadæ¨¡å¼ä¸‹ä¸ºæƒé‡ï¼Œè®¡ç®—æ¨¡å¼ä¸‹ä¸ºä¸Šæ–¹ä¼ æ¥çš„Partial Sum
 // output:
-//      right: Ë®Æ½Êä³öA
-//      down: ´¹Ö±Êä³ö£¬LoadÄ£Ê½ÏÂ´«µİÈ¨ÖØ£¬¼ÆËãÄ£Ê½ÏÂÊä³öÀÛ¼Ó½á¹û
+//      right: æ°´å¹³è¾“å‡ºA
+//      down: å‚ç›´è¾“å‡ºï¼ŒLoadæ¨¡å¼ä¸‹ä¼ é€’æƒé‡ï¼Œè®¡ç®—æ¨¡å¼ä¸‹è¾“å‡ºç´¯åŠ ç»“æœ
 
 `timescale 1ns / 1ps
 
@@ -23,8 +23,8 @@ module PE_Core #(
     input clk,
     input rst_n,
     input data_flow,            // 1: WS, 0: OS
-    input load,                 // WSÄ£Ê½¼ÓÔØÈ¨ÖØ
-    input drain,                // OSÄ£Ê½½á¹ûÊä³öÊ¹ÄÜ
+    input load,                 // WSæ¨¡å¼åŠ è½½æƒé‡
+    input drain,                // OSæ¨¡å¼ç»“æœè¾“å‡ºä½¿èƒ½
     input signed [DATA_WIDTH-1:0] left,      
     input signed [2*DATA_WIDTH-1:0] up,  
     
@@ -38,19 +38,20 @@ module PE_Core #(
     wire drain_neg;
     wire signed [2*DATA_WIDTH-1:0] temp_result;
 
-    // ¶¨ÒåÊµ¼Ê½øÈë³Ë·¨Æ÷B¶Ë¿ÚµÄĞÅºÅ
-    // WSÄ£Ê½: ÓÃ±¾µØ´æºÃµÄ weight_reg
-    // OSÄ£Ê½: Ö±½ÓÓÃÁ÷½øÀ´µÄ up (½ØÈ¡µÍ8Î»)£¬Ïû³ı1ÅÄÑÓ³Ù
+    // å®šä¹‰å®é™…è¿›å…¥ä¹˜æ³•å™¨Bç«¯å£çš„ä¿¡å·
+    // WSæ¨¡å¼: ç”¨æœ¬åœ°å­˜å¥½çš„ weight_reg
+    // OSæ¨¡å¼: ç›´æ¥ç”¨æµè¿›æ¥çš„ up (æˆªå–ä½8ä½)ï¼Œæ¶ˆé™¤1æ‹å»¶è¿Ÿ
     wire signed [DATA_WIDTH-1:0] mult_input_b;
     assign mult_input_b = (data_flow) ? weight_reg : up[DATA_WIDTH-1:0];
 
-    // ÊµÀı»¯³Ë·¨Æ÷
+
+    // å®ä¾‹åŒ–ä¹˜æ³•å™¨
     multiplier u_multiplier(
         .clk(clk),
         .CE(1'b1),
         .SCLR(!rst_n),
         .A(left),
-        .B(mult_input_b), // Ê¹ÓÃÑ¡ÔñºóµÄĞÅºÅ
+        .B(mult_input_b), // ä½¿ç”¨é€‰æ‹©åçš„ä¿¡å·
         .P(temp_result)
     );
 
@@ -71,7 +72,7 @@ module PE_Core #(
             weight_reg <= 0;
             ps_reg     <= 0;
         end else begin
-            // 1. Ë®Æ½Êı¾İÍ¸´« (ÊÊÓÃËùÓĞÄ£Ê½)
+            // 1. æ°´å¹³æ•°æ®é€ä¼  (é€‚ç”¨æ‰€æœ‰æ¨¡å¼)
             right <= left;
 
             if (data_flow) begin
@@ -79,24 +80,24 @@ module PE_Core #(
                 // WS Mode (Weight Stationary)
                 // ========================
                 if (load) begin
-                    // È¨ÖØ¼ÓÔØÓë´«µİ
+                    // æƒé‡åŠ è½½ä¸ä¼ é€’
                     weight_reg <= up[DATA_WIDTH-1:0];
                     down       <= up;
                 end else begin
-                    // È¨ÖØ²»¶¯£¬²¿·ÖºÍÁ÷¶¯
-                    // down = ÉÏ·½µÄ²¿·ÖºÍ + µ±Ç°³Ë»ı
+                    // æƒé‡ä¸åŠ¨ï¼Œéƒ¨åˆ†å’ŒæµåŠ¨
+                    // down = ä¸Šæ–¹çš„éƒ¨åˆ†å’Œ + å½“å‰ä¹˜ç§¯
                     down <= up + temp_result;
                 end
             end else begin
                 // ========================
                 // OS Mode (Output Stationary)
                 // ========================
-                // È¨ÖØ±ØĞëÁ÷¶¯ (´«µİ¸øÏÂ·½PE)
+                // æƒé‡å¿…é¡»æµåŠ¨ (ä¼ é€’ç»™ä¸‹æ–¹PE)
                 down <= up; 
                 if (drain || drain_1d) begin
-                    // ½áËãÄ£Ê½£ºÍ£Ö¹ÀÛ¼Ó£¬½«½á¹ûÍ¨¹ı down ÍÂ³öÈ¥
-                    // ´ËÊ± down ±»½èÓÃÀ´´«Êä½á¹û£¬²»ÔÙ´«È¨ÖØ
-                    // Èç¹ûdrainµÄ×îºóÒ»¸öÖÜÆÚ£¬´ú±í½á¹ûÊä³öÍê³É£¬½«ÖĞ¼äÀÛ¼ÆÇåÁã
+                    // ç»“ç®—æ¨¡å¼ï¼šåœæ­¢ç´¯åŠ ï¼Œå°†ç»“æœé€šè¿‡ down åå‡ºå»
+                    // æ­¤æ—¶ down è¢«å€Ÿç”¨æ¥ä¼ è¾“ç»“æœï¼Œä¸å†ä¼ æƒé‡
+                    // å¦‚æœdrainçš„æœ€åä¸€ä¸ªå‘¨æœŸï¼Œä»£è¡¨ç»“æœè¾“å‡ºå®Œæˆï¼Œå°†ä¸­é—´ç´¯è®¡æ¸…é›¶
                     if(drain_1d)
                         down <= up; 
                     else
@@ -106,7 +107,7 @@ module PE_Core #(
                     else
                         ps_reg <= ps_reg;
                 end else begin
-                    // ÀÛ¼ÓÄ£Ê½
+                    // ç´¯åŠ æ¨¡å¼
                     ps_reg <= ps_reg + temp_result;
                 end
             end
@@ -120,6 +121,7 @@ module multiplier
     input clk,CE,SCLR,
     input signed [DATA_WIDTH-1:0] A,
     input signed [DATA_WIDTH-1:0] B,
+    input signed [2*DATA_WIDTH-1:0] C,
     output reg   [2*DATA_WIDTH-1:0] P
 );
     always@(posedge clk or posedge SCLR)

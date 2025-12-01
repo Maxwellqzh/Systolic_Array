@@ -1,17 +1,3 @@
-// Engineer:      Zhenhang Qin
-// Create Date:   2025/11/24
-// Design Name:   PE_Status_Controller
-// Module Name:   PE_Status_Controller
-// Description:   用于控制PE_Array的计算状态，支持os和ws模式
-// input:
-//      clk: 时钟信号
-//      rst_n: 复位信号
-//      en: 外部输入使能
-//      data_flow: 数据流模式选择信号,1为WS模式,0为OS模式
-// output:
-//      drain_out: 输出给 PE Array 的 drain 信号
-//      valid_out: 全局输出有效信号
-
 `timescale 1ns / 1ps
 
 module PE_Status_Controller #(

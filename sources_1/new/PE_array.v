@@ -1,22 +1,3 @@
-// Engineer:      Zhenhang Qin
-// Create Date:   2025/11/24
-// Design Name:   PE_array
-// Module Name:   PE_array
-// Description:   ÓÃÓÚ¼ÆËãÁ½¸ö¾ØÕóÏà³Ë£¬½á¹û°´ĞĞÊä³ö£¬Ö§³ÖosºÍwsÄ£Ê½
-// input:
-//      clk: Ê±ÖÓĞÅºÅ
-//      rst_n: ¸´Î»ĞÅºÅ
-//      en: Íâ²¿ÊäÈëÊ¹ÄÜ
-//      data_flow: Êı¾İÁ÷Ä£Ê½Ñ¡ÔñĞÅºÅ,1ÎªWSÄ£Ê½,0ÎªOSÄ£Ê½
-//      load: È¨ÖØ¼ÓÔØÊ¹ÄÜĞÅºÅ,µ±loadÎª1Ê±£¬½«B×÷ÎªÈ¨ÖØÊäÈë
-//      acc_en: ÀÛ¼ÓÊ¹ÄÜĞÅºÅ,µ±acc_enÎª1Ê±£¬½«C_acc×÷ÎªÀÛ¼ÓÊäÈë
-//      A: ÊäÈëµÄAÖµ,³¤¶ÈÎªROWS*DATA_WIDTH
-//      B: ÊäÈëµÄBÖµ,³¤¶ÈÎªCOLS*DATA_WIDTH
-//      C_acc: ÊäÈëµÄC_accÖµ,³¤¶ÈÎªCOLS*2*DATA_WIDTH£¬ÊäÈëĞèÒªÊÇÁ÷Ë®ÏßÊ½ÊäÈë
-// output:
-//      valid: Êä³öÓĞĞ§ĞÅºÅ£¬µ±enÀ­µÍÖ®ºó£¬¼´ÊäÈëÍê³ÉÖ®ºó£¬µÈ´ı¼ÆËãÍê³Éºó×Ô¶¯À­¸ß²¢±£³Ö£¬Ö±µ½ËùÓĞ½á¹ûÊä³ö½áÊøÔÙÀ­µÍ
-//      C_out: Êä³ö½á¹û,°´ĞĞÊä³ö,³¤¶ÈÎªCOLS*2*DATA_WIDTH£¬¶ÔÓÚWSÄ£Ê½ÏÂC_OutĞèÒªÍâ²¿¶ÔÆë
-
 `timescale 1ns / 1ps
 
 module PE_Array #(
@@ -26,34 +7,43 @@ module PE_Array #(
 )(
     input clk,
     input rst_n,
-    input en,            // Íâ²¿ÊäÈëÊ¹ÄÜ
+    input en,            // å¤–éƒ¨è¾“å…¥ä½¿èƒ½
     
-    // --- ¿ØÖÆĞÅºÅ ---
+    // --- æ§åˆ¶ä¿¡å· ---
     input data_flow,     // 1: WS Mode, 0: OS Mode
     input load,          // WS Weight Loading
-    input acc_en,        // [ĞÂÔö] ÀÛ¼ÓÊ¹ÄÜ: 1=ÀÛ¼ÓC_acc, 0=´Ó0¿ªÊ¼¼ÆËã (½öÔÚWS¼ÆËãÄ£Ê½ÓĞĞ§)
+    input acc_en,        // [æ–°å¢] ç´¯åŠ ä½¿èƒ½: 1=ç´¯åŠ C_acc, 0=ä»0å¼€å§‹è®¡ç®— (ä»…åœ¨WSè®¡ç®—æ¨¡å¼æœ‰æ•ˆ)
     
-    // --- Êı¾İÊäÈë ---
+    // --- æ•°æ®è¾“å…¥ ---
     input signed [ROWS*DATA_WIDTH-1:0] A,
     input signed [COLS*DATA_WIDTH-1:0] B,
     input signed [COLS*2*DATA_WIDTH-1:0] C_acc,
 
-    // --- Êı¾İÊä³ö ---
-    output valid,        // ÓÉÄÚ²¿ Controller ²úÉú
-    output signed [COLS*2*DATA_WIDTH-1:0] C_out, // Ô­Ê¼µÄĞ±ÏòÊä³ö (Raw Skewed Output)
+    // --- æ•°æ®è¾“å‡º ---
+    output valid,        // ç”±å†…éƒ¨ Controller äº§ç”Ÿ
+    output signed [COLS*2*DATA_WIDTH-1:0] C_out, // åŸå§‹çš„æ–œå‘è¾“å‡º (Raw Skewed Output)
+    output signed [ROWS*DATA_WIDTH-1:0] A_pass_out
 );
 
     // =========================================================
-    // 1. ÄÚ²¿Á¬Ïß¶¨Òå
+    // 1. å†…éƒ¨è¿çº¿å®šä¹‰
     // =========================================================
     wire signed [DATA_WIDTH-1:0] w_hor [0:ROWS-1][0:COLS];
-    wire signed [2*DATA_WIDTH-1:0] w_ver [0:ROWS][0:COLS-1];
-    
-    // ÄÚ²¿¿ØÖÆĞÅºÅ
+    wire signed [2*DATA_WIDTH-1:0] w_ver [0:ROWS][0:COLS-1];    
+    // å†…éƒ¨æ§åˆ¶ä¿¡å·
     wire internal_drain; 
+    reg [COLS*2*DATA_WIDTH-1:0] C_acc_1d;
+
+    always@(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            C_acc_1d <= 0;
+        end else begin
+            C_acc_1d <= C_acc;
+        end
+    end
 
     // =========================================================
-    // 2. ÊµÀı»¯×´Ì¬¿ØÖÆÆ÷
+    // 2. å®ä¾‹åŒ–çŠ¶æ€æ§åˆ¶å™¨
     // =========================================================
     PE_Status_Controller #(
         .ROWS(ROWS),
@@ -63,49 +53,49 @@ module PE_Array #(
         .rst_n(rst_n),
         .en(en),
         .data_flow(data_flow),
-        .drain_out(internal_drain), // OSÄ£Ê½Ê¹ÓÃµÄ Drain ĞÅºÅ
-        .valid_out(valid)           // È«¾ÖÊä³öÓĞĞ§ĞÅºÅ
+        .drain_out(internal_drain), // OSæ¨¡å¼ä½¿ç”¨çš„ Drain ä¿¡å·
+        .valid_out(valid)           // å…¨å±€è¾“å‡ºæœ‰æ•ˆä¿¡å·
     );
 
     // =========================================================
-    // 3. ±ß½çÊäÈë´¦Àí (º¬ Loopback Mux)
+    // 3. è¾¹ç•Œè¾“å…¥å¤„ç† (å« Loopback Mux)
     // =========================================================
     genvar i, j;
     generate
-        // --- ×ó²àÊäÈë A ---
+        // --- å·¦ä¾§è¾“å…¥ A ---
         for (i = 0; i < ROWS; i = i + 1) begin : A_Input_Map
             assign w_hor[i][0] = A[((i+1)*DATA_WIDTH)-1 -: DATA_WIDTH];
         end
 
-        // --- ¶¥²¿ÊäÈë B / C_acc / 0 ---
+        // --- é¡¶éƒ¨è¾“å…¥ B / C_acc / 0 ---
         for (j = 0; j < COLS; j = j + 1) begin : B_Input_Map
-            // ÌáÈ¡µ±Ç°ÁĞµÄ B ÊäÈë (8-bit)
+            // æå–å½“å‰åˆ—çš„ B è¾“å…¥ (8-bit)
             wire signed [DATA_WIDTH-1:0] b_curr_col;
             assign b_curr_col = B[((j+1)*DATA_WIDTH)-1 -: DATA_WIDTH];
             
-            // ÌáÈ¡µ±Ç°ÁĞµÄ Loopback ÊäÈë (16-bit)
+            // æå–å½“å‰åˆ—çš„ Loopback è¾“å…¥ (16-bit)
             wire signed [2*DATA_WIDTH-1:0] acc_curr_col;
-            assign acc_curr_col = C_acc[((j+1)*2*DATA_WIDTH)-1 -: 2*DATA_WIDTH];
+            assign acc_curr_col = C_acc_1d[((j+1)*2*DATA_WIDTH)-1 -: 2*DATA_WIDTH];
 
-            // À©Õ¹ B µ½ 16-bit (·ûºÅÀ©Õ¹)
+            // æ‰©å±• B åˆ° 16-bit (ç¬¦å·æ‰©å±•)
             wire signed [2*DATA_WIDTH-1:0] b_extended;
             assign b_extended = {{DATA_WIDTH{b_curr_col[DATA_WIDTH-1]}}, b_curr_col};
 
-            // ºËĞÄÑ¡ÔñÂß¼­£º
-            // 1. WS Load: ±ØĞëÎ¹È¨ÖØ (B)
-            // 2. OS Mode: ±ØĞëÎ¹Êı¾İÁ÷ (B)
-            // 3. WS Compute & Acc_En: Î¹ Loopback Êı¾İ (C_acc)
-            // 4. WS Compute & !Acc_En: Î¹ 0 (¿ªÊ¼ĞÂÒ»ÂÖ¼ÆËã)
+            // æ ¸å¿ƒé€‰æ‹©é€»è¾‘ï¼š
+            // 1. WS Load: å¿…é¡»å–‚æƒé‡ (B)
+            // 2. OS Mode: å¿…é¡»å–‚æ•°æ®æµ (B)
+            // 3. WS Compute & Acc_En: å–‚ Loopback æ•°æ® (C_acc_1d)
+            // 4. WS Compute & !Acc_En: å–‚ 0 (å¼€å§‹æ–°ä¸€è½®è®¡ç®—)
             
-            assign w_ver[0][j] = (data_flow && load) ? b_extended :   // WS: ¼ÓÔØÈ¨ÖØ
-                                 (!data_flow)        ? b_extended :   // OS: Êı¾İÁ÷
-                                 (acc_en)            ? acc_curr_col : // WS: ÀÛ¼Ó¾É½á¹û
-                                                       {(2*DATA_WIDTH){1'b0}}; // WS: ĞÂ¼ÆËã (ÊäÈë0)
+            assign w_ver[0][j] = (data_flow && load) ? b_extended :   // WS: åŠ è½½æƒé‡
+                                 (!data_flow)        ? b_extended :   // OS: æ•°æ®æµ
+                                 (acc_en)            ? acc_curr_col : // WS: ç´¯åŠ æ—§ç»“æœ
+                                                       {(2*DATA_WIDTH){1'b0}}; // WS: æ–°è®¡ç®— (è¾“å…¥0)
         end
     endgenerate
 
     // =========================================================
-    // 4. PE ÕóÁĞÉú³É
+    // 4. PE é˜µåˆ—ç”Ÿæˆ
     // =========================================================
     generate
         for (i = 0; i < ROWS; i = i + 1) begin : Row_Gen
@@ -129,15 +119,15 @@ module PE_Array #(
     endgenerate
 
     // =========================================================
-    // 5. ±ß½çÊä³ö´¦Àí 
+    // 5. è¾¹ç•Œè¾“å‡ºå¤„ç† 
     // =========================================================
-    // Ö±½ÓÊä³öÕóÁĞµ×²¿µÄÊı¾İ£¬±£³ÖĞ±ÏòÊ±Ğò£¬ÒÔ±ãÍâ²¿ Loopback Ö±½Ó¶Ô½Ó
+    // ç›´æ¥è¾“å‡ºé˜µåˆ—åº•éƒ¨çš„æ•°æ®ï¼Œä¿æŒæ–œå‘æ—¶åºï¼Œä»¥ä¾¿å¤–éƒ¨ Loopback ç›´æ¥å¯¹æ¥
     generate
         for (j = 0; j < COLS; j = j + 1) begin : Final_Output_Map
             assign C_out[((j+1)*2*DATA_WIDTH)-1 -: 2*DATA_WIDTH] = w_ver[ROWS][j];
         end
 
-        // A Í¸´«Êä³ö
+        // A é€ä¼ è¾“å‡º
         for (i = 0; i < ROWS; i = i + 1) begin : A_Pass_Map
             assign A_pass_out[((i+1)*DATA_WIDTH)-1 -: DATA_WIDTH] = w_hor[i][COLS];
         end
